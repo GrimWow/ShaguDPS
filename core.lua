@@ -105,6 +105,8 @@ local config = {
     ["Abolish Disease"] = true,
     ["Purge"] = true,
     ["Devour Magic"] = true,
+    ["Tremor Totem"] = true,
+    ["Poison Cleansing Totem"] = true,
   },
 
   -- appearance
