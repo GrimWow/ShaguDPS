@@ -7,18 +7,26 @@ local round = ShaguDPS.round
 
 -- populate all valid player units
 local validUnits = { ["player"] = true }
-for i=1,4 do validUnits["party" .. i] = true end
-for i=1,40 do validUnits["raid" .. i] = true end
+for i = 1,4 do
+  validUnits["party" .. i] = true
+end
+for i = 1,40 do
+  validUnits["raid" .. i] = true
+end
 
 -- populate all valid player pets
 local validPets = { ["pet"] = true }
-for i=1,4 do validPets["partypet" .. i] = true end
-for i=1,40 do validPets["raidpet" .. i] = true end
+for i = 1,4 do
+  validPets["partypet" .. i] = true
+end
+for i = 1,40 do
+  validPets["raidpet" .. i] = true
+end
 
 -- find unitstr by name
 local unit_cache = {}
 local function UnitByName(name)
-  -- skip all scans if cache is still valid
+-- skip all scans if cache is still valid
   if unit_cache[name] and UnitName(unit_cache[name]) == name then
     return unit_cache[name]
   end
@@ -46,7 +54,7 @@ local function trim(str)
 end
 
 local function combat()
-  -- check if in combat
+-- check if in combat
   if UnitAffectingCombat("player") or UnitAffectingCombat("pet") then
     return true
   end
@@ -56,13 +64,17 @@ local function combat()
 
   if raid >= 1 then
     for i = 1, raid do
-      -- check if any raid member is infight
-      if UnitAffectingCombat("raid"..i) or UnitAffectingCombat("raidpet"..i) then return true end
+    -- check if any raid member is infight
+      if UnitAffectingCombat("raid"..i) or UnitAffectingCombat("raidpet"..i) then
+        return true
+      end
     end
   else
     for i = 1, group do
-      -- check if any group member is infight
-      if UnitAffectingCombat("party"..i) or UnitAffectingCombat("partypet"..i) then return true end
+    -- check if any group member is infight
+      if UnitAffectingCombat("party"..i) or UnitAffectingCombat("partypet"..i) then
+        return true
+      end
     end
   end
 
@@ -93,13 +105,18 @@ end)
 
 -- check each second
 parser.combat:SetScript("OnUpdate", function()
-  if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + 1 end
+  if ( this.tick or 1) > GetTime() then
+    return else
+    this.tick = GetTime() + 1
+  end
   this:UpdateState()
 end)
 
 parser.ScanName = function(self, name)
-  -- ignore invalid messages
-  if not name then return end
+-- ignore invalid messages
+  if not name then
+    return
+  end
 
   -- check if name matches a real player
   for unit, _ in pairs(validUnits) do
@@ -124,7 +141,7 @@ parser.ScanName = function(self, name)
   -- check if name matches a player pet
   for unit, _ in pairs(validPets) do
     if UnitExists(unit) and UnitName(unit) == name then
-      -- parse and set pet owners
+    -- parse and set pet owners
       if strsub(unit,0,3) == "pet" then
         data["classes"][name] = UnitName("player")
       elseif strsub(unit,0,8) == "partypet" then
@@ -146,10 +163,35 @@ parser.ScanName = function(self, name)
   end
 end
 
+parser.UpdateTaken = function (source)
+  for segment = 0, 1 do
+    local entry = data["taken"][segment]
+    if not entry[source] then
+      entry[source] = { ["_sum"] = 0, ["_ctime"] = 1 }
+    end
+
+    entry[source]["_ctime"] = entry[source]["_ctime"] or 1
+    entry[source]["_tick"] = entry[source]["_tick"] or GetTime()
+
+    if entry[source]["_tick"] + 5 < GetTime() then
+      entry[source]["_tick"] = GetTime()
+      entry[source]["_ctime"] = entry[source]["_ctime"] + 5
+    else
+      entry[source]["_ctime"] = entry[source]["_ctime"] + (GetTime() - entry[source]["_tick"])
+      entry[source]["_tick"] = GetTime()
+    end
+  end
+end
+
+
 parser.AddData = function(self, source, action, target, value, school, datatype)
-  -- abort on invalid input
-  if type(source) ~= "string" then return end
-  if not tonumber(value) then return end
+-- abort on invalid input
+  if type(source) ~= "string" then
+    return
+  end
+  if not tonumber(value) then
+    return
+  end
 
   -- trim leading and trailing spaces
   source = trim(source)
@@ -163,7 +205,9 @@ parser.AddData = function(self, source, action, target, value, school, datatype)
   if start_next_segment and data["classes"][source] and data["classes"][source] ~= "__other__" then
     data["damage"][1] = {}
     data["heal"][1] = {}
-
+    data["dispel"][1] = {}
+    data["taken"][1] = {}
+    data["recent"][1] = {}
     start_next_segment = nil
   end
 
@@ -173,7 +217,7 @@ parser.AddData = function(self, source, action, target, value, school, datatype)
     local unitstr = UnitByName(target)
 
     if unitstr then
-      -- calculate the effective healing of the current data
+    -- calculate the effective healing of the current data
       effective = math.min(UnitHealthMax(unitstr) - UnitHealth(unitstr), value)
     end
   end
@@ -185,14 +229,32 @@ parser.AddData = function(self, source, action, target, value, school, datatype)
     -- detect source and write initial table
     if not entry[source] then
       local type = parser:ScanName(source)
+      local targetType = parser:ScanName(target)
+      if targetType and targetType == "PLAYER" and datatype == "damage"then
+      -- Track the inverse, which is damage taken.
+      -- was (target, action, source, source, value, school, "taken")
+      -- Changed action to "source" so we know what npc caused the damage.
+      -- TODO: Bring back in the action somehow. Maybe source:action?
+        local actionIs = action
+        if source then
+          actionIs = source .. ": " .. action
+        end
+        self:AddData(target, actionIs, source, value, school, "taken")
+        -- Also track recent damage taken
+        self:AddRecentDamage(target, value)
+      end
+
+      if type == "PET" and datatype == "taken" then
+        return -- Do not track pet damage right now
+      end
       if type == "PET" then
-        -- create owner table if not yet existing
+      -- create owner table if not yet existing
         local owner = data["classes"][source]
         if not entry[owner] and parser:ScanName(owner) then
           entry[owner] = { ["_sum"] = 0, ["_ctime"] = 1 }
         end
       elseif not type then
-        -- invalid or disabled unit type
+      -- invalid or disabled unit type
         break
       end
 
@@ -203,10 +265,10 @@ parser.AddData = function(self, source, action, target, value, school, datatype)
     -- write pet damage into owners data if enabled
     local action, source = action, source
     if config.merge_pets == 1 and                 -- merge pets?
-      data["classes"][source] ~= "__other__" and  -- valid unit?
-      entry[data["classes"][source]]              -- has owner?
+    data["classes"][source] ~= "__other__" and  -- valid unit?
+    entry[data["classes"][source]]              -- has owner?
     then
-      -- remove pet data
+    -- remove pet data
       entry[source] = nil
 
       action = "Pet: " .. source
@@ -218,13 +280,15 @@ parser.AddData = function(self, source, action, target, value, school, datatype)
       end
     end
 
+    parser.UpdateTaken(source)
+    parser.AddRecentDamage(source, 0)
     if entry[source] then
-      -- write overall value and per spell
+    -- write overall value and per spell
       entry[source][action] = (entry[source][action] or 0) + tonumber(value)
       entry[source]["_sum"] = (entry[source]["_sum"] or 0) + tonumber(value)
 
       if datatype == "heal" then
-        -- write effective healing sumary
+      -- write effective healing sumary
         entry[source]["_esum"] = (entry[source]["_esum"] or 0) + tonumber(effective)
 
         -- write effective healing per spell
@@ -247,6 +311,49 @@ parser.AddData = function(self, source, action, target, value, school, datatype)
 
   for id, callback in pairs(parser.callbacks.refresh) do
     callback()
+  end
+end
+
+-- Track recent damage (last 5 seconds)
+parser.AddRecentDamage = function(self, target, value)
+  if not target then
+    return
+  end
+  local currentTime = GetTime()
+
+  for segment = 0, 1 do
+    local entry = data["recent"][segment]
+
+    -- Initialize target entry if not exists
+    if not entry[target] then
+      entry[target] = { ["_sum"] = 0, ["_ctime"] = 1, ["_events"] = {} }
+    end
+
+    -- Add new damage event with timestamp
+    if value ~= 0 then
+      table.insert(entry[target]["_events"], { value = value, time = currentTime })
+    end
+
+    -- Clean up old events (older than 5 seconds)
+    local events = entry[target]["_events"]
+    local i = 1
+    start = table.getn(events)
+    while i <= table.getn(events) do
+      if currentTime - events[i].time > 5 then
+        table.remove(events, i)
+      else
+        i = i + 1
+      end
+    end
+
+    -- Recalculate sum from recent events
+    local sum = 0
+    for _, event in ipairs(events) do
+      if event and event.value then
+        sum = sum + event.value
+      end
+    end
+    entry[target]["_sum"] = sum
   end
 end
 
