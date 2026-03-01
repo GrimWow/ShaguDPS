@@ -19,10 +19,14 @@ local textures = {
 
 -- a basic rounding function
 local function round(input, places)
-  if not places then places = 0 end
+  if not places then
+    places = 0
+  end
   if type(input) == "number" and type(places) == "number" then
     local pow = 1
-    for i = 1, places do pow = pow * 10 end
+    for i = 1, places do
+      pow = pow * 10
+    end
     return floor(input * pow + 0.5) / pow
   end
 end
@@ -53,6 +57,22 @@ local data = {
     [1] = {}, -- current
   },
 
+  dispel = {
+    [0] = {}, -- overall
+    [1] = {}, -- current
+  },
+
+  -- Damage taken by players
+  taken = {
+    [0] = {}, -- overall
+    [1] = {}, -- current
+  },
+
+  recent = {
+    [0] = {}, -- overall
+    [1] = {}, -- current
+  },
+
   classes = {},
 }
 
@@ -71,6 +91,22 @@ local config = {
   track_all_units = 0,
   merge_pets = 1,
 
+  -- dispel tracking
+  dispel_tracking = 1,
+  dispel_spells = {
+    ["Dispel Magic"] = true,
+    ["Remove Lesser Curse"] = true,
+    ["Remove Curse"] = true,
+    ["Cleanse"] = true,
+    ["Purify"] = true,
+    ["Cure Poison"] = true,
+    ["Abolish Poison"] = true,
+    ["Cure Disease"] = true,
+    ["Abolish Disease"] = true,
+    ["Purge"] = true,
+    ["Devour Magic"] = true,
+  },
+
   -- appearance
   visible = 1,
   backdrop = 1,
@@ -85,6 +121,7 @@ local internals = {
   ["_tick"] = true,
   ["_esum"] = true,
   ["_effective"] = true,
+  ["_events"] = true,
 }
 
 -- create core component frames

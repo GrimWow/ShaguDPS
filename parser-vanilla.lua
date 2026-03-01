@@ -1,4 +1,6 @@
 local parser = ShaguDPS.parser
+local config = ShaguDPS.config
+local dispel_spells = config.dispel_spells
 
 -- sanitize, cache and convert patterns into gfind compatible ones
 local sanitize_cache = {}
@@ -27,7 +29,7 @@ local capture_cache = {}
 function captures(pat)
   local r = capture_cache
   if not r[pat] then
-    -- set default to nil
+  -- set default to nil
     r[pat] = { nil, nil, nil, nil, nil }
 
     -- try to find custom capture indexes
@@ -46,7 +48,7 @@ end
 -- same as string.find but aware of up to 5 capture indexes
 local ra, rb, rc, rd, re, a, b, c, d, e, match, num, va, vb, vc, vd, ve
 function cfind(str, pat)
-  -- read capture indexes
+-- read capture indexes
   a, b, c, d, e = captures(pat)
   match, num, va, vb, vc, vd, ve = string.find(str, sanitize(pat))
 
@@ -106,6 +108,18 @@ local combatlog_strings = {
   },
   ["Periodic Heal (other vs. self/other)"] = {
     PERIODICAURAHEALSELFSELF, PERIODICAURAHEALOTHERSELF
+  },
+
+  ["Dispel Casts"] = {
+    SPELLCASTGOSELFTARGETTED,
+    SPELLCASTGOSELF,
+    SPELLCASTGOOTHERTARGETTED,
+    SPELLCASTGOOTHER,
+
+    SPELLPERFORMGOSELFTARGETTED,
+    SPELLPERFORMGOSELF,
+    SPELLPERFORMGOOTHERTARGETTED,
+    SPELLPERFORMGOOTHER,
   }
 }
 
@@ -144,244 +158,311 @@ local combatlog_events = {
   ["CHAT_MSG_SPELL_PERIODIC_PARTY_BUFFS"] = combatlog_strings["Periodic Heal (self/other vs. other)"],
   ["CHAT_MSG_SPELL_PERIODIC_FRIENDLYPLAYER_BUFFS"] = combatlog_strings["Periodic Heal (self/other vs. other)"],
   ["CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS"] = combatlog_strings["Periodic Heal (self/other vs. other)"],
-  ["CHAT_MSG_SPELL_PERIODIC_SELF_BUFFS"] = combatlog_strings["Periodic Heal (other vs. self/other)"]
+  ["CHAT_MSG_SPELL_PERIODIC_SELF_BUFFS"] = combatlog_strings["Periodic Heal (other vs. self/other)"],
+
+  -- Dispel, Decurse, Cure
+  ["CHAT_MSG_SPELL_SELF_DEBUFF"] = combatlog_strings["Dispel Casts"],
+  ["CHAT_MSG_SPELL_PARTY_DEBUFF"] = combatlog_strings["Dispel Casts"],
+  ["CHAT_MSG_SPELL_FRIENDLYPLAYER_DEBUFF"] = combatlog_strings["Dispel Casts"],
+  ["CHAT_MSG_SPELL_HOSTILEPLAYER_DEBUFF"] = combatlog_strings["Dispel Casts"]
 }
+
+for _, pat in pairs(combatlog_strings["Dispel Casts"]) do
+  table.insert(combatlog_strings["Heal (self vs. self/other)"], pat)
+  table.insert(combatlog_strings["Heal (other vs. self/other)"], pat)
+end
 
 -- list of all possible patterns including the logic on how to parse them
 local combatlog_parser = {
   [SPELLLOGSCHOOLSELFSELF] = function(d, attack, value, school)
-    -- Your %s hits you for %d %s damage.
+  -- Your %s hits you for %d %s damage.
     return d.source, attack, d.target, value, school, "damage"
   end,
 
   [SPELLLOGCRITSCHOOLSELFSELF] = function(d, attack, value, school)
-    -- Your %s crits you for %d %s damage.
+  -- Your %s crits you for %d %s damage.
     return d.source, attack, d.target, value, school, "damage"
   end,
 
   [SPELLLOGSELFSELF] = function(d, attack, value)
-    -- Your %s hits you for %d.
+  -- Your %s hits you for %d.
     return d.source, attack, d.target, value, d.school, "damage"
   end,
 
   [SPELLLOGCRITSELFSELF] = function(d, attack, value)
-    -- Your %s crits you for %d.
+  -- Your %s crits you for %d.
     return d.source, attack, d.target, value, d.school, "damage"
   end,
 
   [PERIODICAURADAMAGESELFSELF] = function(d, value, school, attack)
-    -- You suffer %d %s damage from your %s.
+  -- You suffer %d %s damage from your %s.
     return d.source, attack, d.target, value, school, "damage"
   end,
 
   [SPELLLOGSCHOOLSELFOTHER] = function(d, attack, target, value, school)
-    -- Your %s hits %s for %d %s damage.
+  -- Your %s hits %s for %d %s damage.
     return d.source, attack, target, value, school, "damage"
   end,
 
   [SPELLLOGCRITSCHOOLSELFOTHER] = function(d, attack, target, value, school)
-    -- Your %s crits %s for %d %s damage.
+  -- Your %s crits %s for %d %s damage.
     return d.source, attack, target, value, school, "damage"
   end,
 
   [SPELLLOGSELFOTHER] = function(d, attack, target, value)
-    -- Your %s hits %s for %d.
+  -- Your %s hits %s for %d.
     return d.source, attack, target, value, d.school, "damage"
   end,
 
   [SPELLLOGCRITSELFOTHER] = function(d, attack, target, value)
-    -- Your %s crits %s for %d.
+  -- Your %s crits %s for %d.
     return d.source, attack, target, value, d.school, "damage"
   end,
 
   [PERIODICAURADAMAGESELFOTHER] = function(d, target, value, school, attack)
-    -- %s suffers %d %s damage from your %s.
+  -- %s suffers %d %s damage from your %s.
     return d.source, attack, target, value, school, "damage"
   end,
 
   [COMBATHITSELFOTHER] = function(d, target, value)
-    -- You hit %s for %d.
+  -- You hit %s for %d.
     return d.source, d.attack, target, value, d.school, "damage"
   end,
 
   [COMBATHITCRITSELFOTHER] = function(d, target, value)
-    -- You crit %s for %d.
+  -- You crit %s for %d.
     return d.source, d.attack, target, value, d.school, "damage"
   end,
 
   [COMBATHITSCHOOLSELFOTHER] = function(d, target, value, school)
-    -- You hit %s for %d %s damage.
+  -- You hit %s for %d %s damage.
     return d.source, d.attack, target, value, school, "damage"
   end,
 
   [COMBATHITCRITSCHOOLSELFOTHER] = function(d, target, value, school)
-    -- You crit %s for %d %s damage.
+  -- You crit %s for %d %s damage.
     return d.source, d.attack, target, value, school, "damage"
   end,
 
   [DAMAGESHIELDSELFOTHER] = function(d, value, school, target)
-    -- You reflect %d %s damage to %s.
+  -- You reflect %d %s damage to %s.
     return d.source, "Reflect ("..school..")", target, value, school, "damage"
   end,
 
   [SPELLLOGSCHOOLOTHERSELF] = function(d, source, attack, value, school)
-    -- %s's %s hits you for %d %s damage.
+  -- %s's %s hits you for %d %s damage.
     return source, attack, d.target, value, school, "damage"
   end,
 
   [SPELLLOGCRITSCHOOLOTHERSELF] = function(d, source, attack, value, school)
-    -- %s's %s crits you for %d %s damage.
+  -- %s's %s crits you for %d %s damage.
     return source, attack, d.target, value, school, "damage"
   end,
 
   [SPELLLOGOTHERSELF] = function(d, source, attack, value)
-    -- %s's %s hits you for %d.
+  -- %s's %s hits you for %d.
     return source, attack, d.target, value, d.school, "damage"
   end,
 
   [SPELLLOGCRITOTHERSELF] = function(d, source, attack, value)
-    -- %s's %s crits you for %d.
+  -- %s's %s crits you for %d.
     return source, attack, d.target, value, d.school, "damage"
   end,
 
   [PERIODICAURADAMAGEOTHERSELF] = function(d, value, school, source, attack)
-    -- You suffer %d %s damage from %s's %s.
+  -- You suffer %d %s damage from %s's %s.
     return source, attack, d.target, value, school, "damage"
   end,
 
   [COMBATHITOTHERSELF] = function(d, source, value)
-    -- %s hits you for %d.
+  -- %s hits you for %d.
     return source, d.attack, d.target, value, d.school, "damage"
   end,
 
   [COMBATHITCRITOTHERSELF] = function(d, source, value)
-    -- %s crits you for %d.
+  -- %s crits you for %d.
     return source, d.attack, d.target, value, d.school, "damage"
   end,
 
   [COMBATHITSCHOOLOTHERSELF] = function(d, source, value, school)
-    -- %s hits you for %d %s damage.
+  -- %s hits you for %d %s damage.
     return source, d.attack, d.target, value, school, "damage"
   end,
 
   [COMBATHITCRITSCHOOLOTHERSELF] = function(d, source, value, school)
-    -- %s crits you for %d %s damage.
+  -- %s crits you for %d %s damage.
     return source, d.attack, d.target, value, school, "damage"
   end,
 
   [SPELLLOGSCHOOLOTHEROTHER] = function(d, source, attack, target, value, school)
-    -- %s's %s hits %s for %d %s damage.
+  -- %s's %s hits %s for %d %s damage.
     return source, attack, target, value, school, "damage"
   end,
 
   [SPELLLOGCRITSCHOOLOTHEROTHER] = function(d, source, attack, target, value, school)
-    -- %s's %s crits %s for %d %s damage.
+  -- %s's %s crits %s for %d %s damage.
     return source, attack, target, value, school, "damage"
   end,
 
   [SPELLLOGOTHEROTHER] = function(d, source, attack, target, value)
-    -- %s's %s hits %s for %d.
+  -- %s's %s hits %s for %d.
     return source, attack, target, value, d.school, "damage"
   end,
 
   [SPELLLOGCRITOTHEROTHER] = function(d, source, attack, target, value, school)
-    -- %s's %s crits %s for %d.
+  -- %s's %s crits %s for %d.
     return source, attack, target, value, school, "damage"
   end,
 
   [PERIODICAURADAMAGEOTHEROTHER] = function(d, target, value, school, source, attack)
-    -- %s suffers %d %s damage from %s's %s.
+  -- %s suffers %d %s damage from %s's %s.
     return source, attack, target, value, school, "damage"
   end,
 
   [COMBATHITOTHEROTHER] = function(d, source, target, value)
-    -- %s hits %s for %d.
+  -- %s hits %s for %d.
     return source, d.attack, target, value, d.school, "damage"
   end,
 
   [COMBATHITCRITOTHEROTHER] = function(d, source, target, value)
-    -- %s crits %s for %d.
+  -- %s crits %s for %d.
     return source, d.attack, target, value, d.school, "damage"
   end,
 
   [COMBATHITSCHOOLOTHEROTHER] = function(d, source, target, value, school)
-    -- %s hits %s for %d %s damage.
+  -- %s hits %s for %d %s damage.
     return source, d.attack, target, value, school, "damage"
   end,
 
   [COMBATHITCRITSCHOOLOTHEROTHER] = function(d, source, target, value, school)
-    -- %s crits %s for %d %s damage.
+  -- %s crits %s for %d %s damage.
     return source, d.attack, target, value, school, "damage"
   end,
 
   [DAMAGESHIELDOTHERSELF] = function(d, source, value, school)
-    -- %s reflects %d %s damage to you.
+  -- %s reflects %d %s damage to you.
     return source, "Reflect ("..school..")", d.target, value, school, "damage"
   end,
 
   [DAMAGESHIELDOTHEROTHER] = function(d, source, value, school, target)
-    -- %s reflects %d %s damage to %s.
+  -- %s reflects %d %s damage to %s.
     return source, "Reflect ("..school..")", target, value, school, "damage"
   end,
 
   [HEALEDCRITOTHERSELF] = function(d, source, spell, value)
-    -- %s's %s critically heals you for %d.
+  -- %s's %s critically heals you for %d.
     return source, spell, d.target, value, d.school, "heal"
   end,
 
   [HEALEDOTHERSELF] = function(d, source, spell, value)
-    -- %s's %s heals you for %d.
+  -- %s's %s heals you for %d.
     return source, spell, d.target, value, d.school, "heal"
   end,
 
   [PERIODICAURAHEALOTHERSELF] = function(d, value, source, spell)
-    -- You gain %d health from %s's %s.
+  -- You gain %d health from %s's %s.
     return source, spell, d.target, value, d.school, "heal"
   end,
 
   [HEALEDCRITSELFSELF] = function(d, spell, value)
-    -- Your %s critically heals you for %d.
+  -- Your %s critically heals you for %d.
     return d.source, spell, d.target, value, d.school, "heal"
   end,
 
   [HEALEDSELFSELF] = function(d, spell, value)
-    -- Your %s heals you for %d.
+  -- Your %s heals you for %d.
     return d.source, spell, d.target, value, d.school, "heal"
   end,
 
   [PERIODICAURAHEALSELFSELF] = function(d, value, spell)
-    -- You gain %d health from %s.
+  -- You gain %d health from %s.
     return d.source, spell, d.target, value, d.school, "heal"
   end,
 
   [HEALEDCRITSELFOTHER] = function(d, spell, target, value)
-    -- Your %s critically heals %s for %d.
+  -- Your %s critically heals %s for %d.
     return d.source, spell, target, value, d.school, "heal"
   end,
 
   [HEALEDSELFOTHER] = function(d, spell, target, value)
-    -- Your %s heals %s for %d.
+  -- Your %s heals %s for %d.
     return d.source, spell, target, value, d.school, "heal"
   end,
 
   [PERIODICAURAHEALSELFOTHER] = function(d, target, value, spell)
-    -- %s gains %d health from your %s.
+  -- %s gains %d health from your %s.
     return d.source, spell, target, value, d.school, "heal"
   end,
 
   [HEALEDCRITOTHEROTHER] = function(d, source, spell, target, value)
-    -- %s's %s critically heals %s for %d.
+  -- %s's %s critically heals %s for %d.
     return source, spell, target, value, d.school, "heal"
   end,
 
   [HEALEDOTHEROTHER] = function(d, source, spell, target, value)
-    -- %s's %s heals %s for %d.
+  -- %s's %s heals %s for %d.
     return source, spell, target, value, d.school, "heal"
   end,
 
   [PERIODICAURAHEALOTHEROTHER] = function(d, target, value, source, spell)
-    -- %s gains %d health from %s's %s.
+  -- %s gains %d health from %s's %s.
     return source, spell, target, value, d.school, "heal"
+  end,
+
+  [SPELLCASTGOSELFTARGETTED] = function(d, spell, target)
+    if not dispel_spells[spell] then
+      return
+    end
+    return d.source, spell, target, 1, d.school, "dispel"
+  end,
+
+  [SPELLCASTGOSELF] = function(d, spell)
+    if not dispel_spells[spell] then
+      return
+    end
+    return d.source, spell, d.target, 1, d.school, "dispel"
+  end,
+
+  [SPELLCASTGOOTHERTARGETTED] = function(d, source, spell, target)
+    if not dispel_spells[spell] then
+      return
+    end
+    return source, spell, target, 1, d.school, "dispel"
+  end,
+
+  [SPELLCASTGOOTHER] = function(d, source, spell)
+    if not dispel_spells[spell] then
+      return
+    end
+    return source, spell, d.target, 1, d.school, "dispel"
+  end,
+
+  [SPELLPERFORMGOSELFTARGETTED] = function(d, spell, target)
+    if not dispel_spells[spell] then
+      return
+    end
+    return d.source, spell, target, 1, d.school, "dispel"
+  end,
+
+  [SPELLPERFORMGOSELF] = function(d, spell)
+    if not dispel_spells[spell] then
+      return
+    end
+    return d.source, spell, d.target, 1, d.school, "dispel"
+  end,
+
+  [SPELLPERFORMGOOTHERTARGETTED] = function(d, source, spell, target)
+    if not dispel_spells[spell] then
+      return
+    end
+    return source, spell, target, 1, d.school, "dispel"
+  end,
+
+  [SPELLPERFORMGOOTHER] = function(d, source, spell)
+    if not dispel_spells[spell] then
+      return
+    end
+    return source, spell, d.target, 1, d.school, "dispel"
   end,
 }
 
@@ -411,7 +492,9 @@ local player = UnitName("player")
 
 -- call all datasources on each event
 parser:SetScript("OnEvent", function()
-  if not arg1 then return end
+  if not arg1 then
+    return
+  end
 
   -- remove absorb and resist suffixes
   arg1 = string.gsub(arg1, absorb, empty)
@@ -422,8 +505,8 @@ parser:SetScript("OnEvent", function()
   defaults.target = player
   defaults.school = physical
   defaults.attack = autohit
-  defaults.spell  = UNKNOWN
-  defaults.value  = 0
+  defaults.spell = UNKNOWN
+  defaults.value = 0
 
   -- iterate over all patterns assigned to the current event
   for _, pattern in pairs(combatlog_events[event]) do

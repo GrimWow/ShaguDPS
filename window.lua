@@ -85,19 +85,67 @@ local view_templates = {
     bar_string = "%s (%.1f%%)",
     bar_string_params = { "effective_value_persecond", "effective_percent" },
   },
+  [5] = { -- dispel
+    name = "Dispel",
+    sort = "normal",
+    bar_max = "best",
+    bar_val = "value",
+    bar_lower_max = nil,
+    bar_lower_val = nil,
+    chat_string = "%s (%.1f%%)",
+    bar_string = "%s (%.1f%%)",
+    bar_string_params = { "value", "percent" },
+  },
+  [6] = { -- taken
+    name = "Taken",
+    sort = "normal",
+    bar_max = "best",
+    bar_val = "value",
+    bar_lower_max = nil,
+    bar_lower_val = nil,
+    chat_string = "%s (%.1f%%)",
+    bar_string = "%s (%.1f%%)",
+    bar_string_params = { "value", "percent" },
+  },
+  [7] = { -- tps
+    name = "TPS",
+    sort = "per_second",
+    bar_max = "persecond_best",
+    bar_val = "value_persecond",
+    bar_lower_max = nil,
+    bar_lower_val = nil,
+    chat_string = "%s (%.1f%%)",
+    bar_string = "%s (%.1f%%)",
+    bar_string_params = { "value_persecond", "percent_persecond" },
+  },
+  [8] = { -- recent
+    name = "Recent",
+    sort = "normal",
+    bar_max = "best",
+    bar_val = "value",
+    bar_lower_max = nil,
+    bar_lower_val = nil,
+    chat_string = "%s (%.1f%%)",
+    bar_string = "%s (%.1f%%)",
+    bar_string_params = { "value", "percent" },
+  },
 }
 
 -- panel button templates
 local menubuttons = {
   -- segments
-  ["Current"]  = { 0, 1, -25.5, "Current Segment", "|cffffffffShow current fight",      "segment" },
-  ["Overall"]  = { 1, 0, -25.5, "Overall Segment", "|cffffffffShow all fights",         "segment" },
+  ["Current"] = { 0, 1, -25.5, "Current Segment", "|cffffffffShow current fight",      "segment" },
+  ["Overall"] = { 1, 0, -25.5, "Overall Segment", "|cffffffffShow all fights",         "segment" },
 
   -- modes
-  ["Damage"]   = { 0, 1, 25.5,  "Damage View",     "|cffffffffShow Damage Done",        "view" },
-  ["DPS"]      = { 1, 2, 25.5,  "DPS View",        "|cffffffffShow Damage Per Second",  "view" },
-  ["Heal"]     = { 2, 3, 25.5,  "Heal View",       "|cffffffffShow Healing Done",       "view" },
-  ["HPS"]      = { 3, 4, 25.5,  "HPS View",        "|cffffffffShow Heal Per Second",    "view" },
+  ["Damage"] = { 0, 1, 25.5,  "Damage View",     "|cffffffffShow Damage Done",        "view" },
+  ["DPS"] = { 1, 2, 25.5,  "DPS View",        "|cffffffffShow Damage Per Second",  "view" },
+  ["Heal"] = { 2, 3, 25.5,  "Heal View",       "|cffffffffShow Healing Done",       "view" },
+  ["HPS"] = { 3, 4, 25.5,  "HPS View",        "|cffffffffShow Heal Per Second",    "view" },
+  ["Dispel"] = { 4, 5, 25.5, "Dispel View", "|cffffffffShow Dispel Casts", "view" },
+  ["Taken"] = { 5, 6, 25.5,  "Taken View",      "|cffffffffShow Damage Taken",       "view" },
+  ["TPS"] = { 6, 7, 25.5,  "TPS View",        "|cffffffffShow Taken Per Second",   "view" },
+  ["Recent"] = { 7, 8, 25.5,  "Recent View",     "|cffffffffShow Recent Damage (5s)", "view" },
 }
 
 -- default colors of chat types
@@ -134,22 +182,28 @@ local sort_algorithms = {
     if t["_effective"] and t["_effective"][a] and t["_effective"][b] and t["_effective"][a] ~= t["_effective"][b] then
       return t["_effective"][b] < t["_effective"][a]
     else
-      if tonumber(t[b]) and tonumber(t[a]) then return t[b] < t[a] end
+      if tonumber(t[b]) and tonumber(t[a]) then
+        return t[b] < t[a]
+      end
     end
   end
 }
 
 local rgbcache = {}
 local function str2rgb(text)
-  if not text then return 1, 1, 1 end
-  if rgbcache[text] then return unpack(rgbcache[text]) end
+  if not text then
+    return 1, 1, 1
+  end
+  if rgbcache[text] then
+    return unpack(rgbcache[text])
+  end
   local counter = 1
   local l = string.len(text)
   for i = 1, l, 3 do
     counter = mod(counter*8161, 4294967279) +
-        (string.byte(text,i)*16776193) +
-        ((string.byte(text,i+1) or (l-i+256))*8372226) +
-        ((string.byte(text,i+2) or (l-i+256))*3932164)
+    (string.byte(text,i)*16776193) +
+    ((string.byte(text,i+1) or (l-i+256))*8372226) +
+    ((string.byte(text,i+2) or (l-i+256))*3932164)
   end
   local hash = mod(mod(counter, 4294967291),16777216)
   local r = (hash - (mod(hash,65536))) / 65536
@@ -160,14 +214,17 @@ local function str2rgb(text)
 end
 
 local function spairs(t, order)
-  -- collect the keys
+-- collect the keys
   local keys = {}
-  for k in pairs(t) do keys[table.getn(keys)+1] = k end
+  for k in pairs(t) do
+    keys[table.getn(keys)+1] = k
+  end
 
   -- if order function given, sort by it by passing the table and keys a, b,
   -- otherwise just sort the keys
   if order then
-    table.sort(keys, function(a,b) return order(t, a, b) end)
+    table.sort(keys, function(a,b) return order(t, a, b)
+    end)
   else
     table.sort(keys)
   end
@@ -204,6 +261,9 @@ local function barTooltipShow()
     GameTooltip:AddLine(" ")
     GameTooltip:AddDoubleLine("|cffffffffHealing Per Second", "|cffffffff" .. epersec)
     GameTooltip:AddDoubleLine("|cffaaaaaaOverheal Per Second", "|cffcc8888+" .. persec - epersec)
+  elseif config[wid].view == 5 then
+    GameTooltip:AddDoubleLine("|cffffffffDispels", "|cffffffff" .. value)
+    GameTooltip:AddDoubleLine("|cffffffffDispels Per Second", "|cffffffff" .. persec)
   end
 
   GameTooltip:AddLine(" ")
@@ -213,14 +273,14 @@ local function barTooltipShow()
     if attack and not internals[attack] then
       local percent = damage == 0 and 0 or round(damage / segment[this.unit]["_sum"] * 100,1)
       if segment[this.unit]["_effective"] and segment[this.unit]["_effective"][attack] then
-        -- heal / effective heal
+      -- heal / effective heal
         local effective = segment[this.unit]["_effective"][attack]
         local epercent = effective == 0 and 0 or round(effective / segment[this.unit]["_esum"] * 100,1)
 
         local str = string.format("|cffcc8888+%s|cffffffff %s (%.1f%%)", damage - effective, effective, epercent)
         GameTooltip:AddDoubleLine("|cffffffff" .. attack, str)
       else
-        -- damage
+      -- damage
         local str = string.format("|cffffffff %s (%.1f%%)", damage, percent)
         GameTooltip:AddDoubleLine("|cffffffff" .. attack, str)
       end
@@ -249,7 +309,7 @@ local function barScrollWheel()
 end
 
 local function ResetData()
-  -- clear overall damage data
+-- clear overall damage data
   for k, v in pairs(data.damage[0]) do
     data.damage[0][k] = nil
   end
@@ -269,8 +329,28 @@ local function ResetData()
     data.heal[1][k] = nil
   end
 
-  for i=1,10 do
-    if window[i] then window[i].scroll = 0 end
+  -- clear overall dispel data
+  for k, v in pairs(data.dispel[0]) do
+    data.dispel[0][k] = nil
+  end
+  -- clear current dispel data
+  for k, v in pairs(data.dispel[1]) do
+    data.dispel[1][k] = nil
+  end
+
+  for k, v in pairs(data.taken[0]) do
+    data.taken[0][k] = nil
+  end
+
+  -- clear current taken data
+  for k, v in pairs(data.taken[1]) do
+    data.taken[1][k] = nil
+  end
+
+  for i = 1,10 do
+    if window[i] then
+      window[i].scroll = 0
+    end
   end
 
   -- reload all windows
@@ -432,7 +512,7 @@ local function GetData(unitdata, values)
   end
 
   -- check pet and detect owner/unit names
-  local pet  = not classes[data["classes"][values.name]] and data["classes"][values.name] ~= "__other__"
+  local pet = not classes[data["classes"][values.name]] and data["classes"][values.name] ~= "__other__"
   local unit = pet and data["classes"][values.name] or values.name
 
   -- merge pet/owner strings if option is set
@@ -452,7 +532,7 @@ local function GetData(unitdata, values)
 
   -- replace color by class colors if possible
   if classes[data["classes"][unit]] then
-    -- set color to player class colors
+  -- set color to player class colors
     values.color.r = RAID_CLASS_COLORS[data["classes"][unit]].r
     values.color.g = RAID_CLASS_COLORS[data["classes"][unit]].g
     values.color.b = RAID_CLASS_COLORS[data["classes"][unit]].b
@@ -468,8 +548,10 @@ local function GetData(unitdata, values)
 end
 
 local function Refresh(self, force, report)
-  -- skip refreshs on legacy calls
-  if not self or type(self) == "boolean" then return end
+-- skip refreshs on legacy calls
+  if not self or type(self) == "boolean" then
+    return
+  end
 
   -- assign shortcuts
   local values, buttons = self.values, self.buttons
@@ -489,7 +571,7 @@ local function Refresh(self, force, report)
 
     -- update backdrop borders
     if config.backdrop == 1 then
-      -- window background
+    -- window background
       self:SetBackdrop(backdrop_window)
       self:SetBackdropColor(.5,.5,.5,.5)
 
@@ -514,6 +596,18 @@ local function Refresh(self, force, report)
     elseif config[wid].view == 4 then
       self.btnHPS.caption:SetTextColor(1,.9,0,1)
       self.btnMode.caption:SetText("HPS")
+    elseif config[wid].view == 5 then
+      self.btnDispel.caption:SetTextColor(1,.9,0,1)
+      self.btnMode.caption:SetText("Dispel")
+    elseif config[wid].view == 6 then
+      self.btnTaken.caption:SetTextColor(1,.9,0,1)
+      self.btnMode.caption:SetText("Taken")
+    elseif config[wid].view == 7 then
+      self.btnTPS.caption:SetTextColor(1,.9,0,1)
+      self.btnMode.caption:SetText("TPS")
+    elseif config[wid].view == 8 then
+      self.btnRecent.caption:SetTextColor(1,.9,0,1)
+      self.btnMode.caption:SetText("Recent")
     end
 
     if config[wid].segment == 0 then
@@ -539,10 +633,16 @@ local function Refresh(self, force, report)
     self.segment = data.damage[(config[wid].segment or 0)]
   elseif config[wid].view == 3 or config[wid].view == 4 then
     self.segment = data.heal[(config[wid].segment or 0)]
+  elseif config[wid].view == 5 then
+    self.segment = data.dispel[(config[wid].segment or 0)]
+  elseif config[wid].view == 6 or config[wid].view == 7 then
+    self.segment = data.taken[(config[wid].segment or 0)]
+  elseif config[wid].view == 8 then
+    self.segment = data.recent[(config[wid].segment or 0)]
   end
 
   -- read view settings
-  local view_effective  = (config[wid].view == 3 or config[wid].view == 4) and true or nil
+  local view_effective = (config[wid].view == 3 or config[wid].view == 4) and true or nil
   local view_per_second = (config[wid].view == 2 or config[wid].view == 4) and true or nil
 
   local template = view_templates[config[wid].view]
@@ -560,7 +660,7 @@ local function Refresh(self, force, report)
 
   local i = 1
   for name, unitdata in spairs(self.segment, sort) do
-    -- attach name to values
+  -- attach name to values
     self.values.name = name
 
     -- load data values of the current unit
@@ -624,7 +724,7 @@ local function Resize(self)
 end
 
 local function CreateWindow(wid)
-  -- create default config
+-- create default config
   config[wid] = config[wid] or {}
   config[wid].bars = config[wid].bars or 8
   config[wid].width = config[wid].width or 177
@@ -640,11 +740,11 @@ local function CreateWindow(wid)
 
   frame.LoadPosition = function()
     if ShaguDPS_Config and ShaguDPS_Config[frame:GetID()] and ShaguDPS_Config[frame:GetID()].pos then
-      -- load config position if existing
+    -- load config position if existing
       frame:ClearAllPoints()
       frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", unpack(ShaguDPS_Config[frame:GetID()].pos))
     else
-      -- use default window position
+    -- use default window position
       frame:ClearAllPoints()
       frame:SetPoint("RIGHT", UIParent, "RIGHT", -100, -100)
     end
@@ -672,13 +772,16 @@ local function CreateWindow(wid)
   frame:SetClampedToScreen(true)
 
   frame:SetScript("OnUpdate", function()
-    -- update config on resize
+  -- update config on resize
     if this.sizing then
       this:Resize()
     end
 
     -- only check for updates every .2 seconds
-    if ( this.tick or 1) > GetTime() then return else this.tick = GetTime() + .2 end
+    if ( this.tick or 1) > GetTime() then
+      return else
+      this.tick = GetTime() + .2
+    end
 
     -- check for resize button
     if config.lock == 0 and MouseIsOver(this) then
@@ -728,6 +831,10 @@ local function CreateWindow(wid)
       frame.btnHPS:Hide()
       frame.btnOverall:Hide()
       frame.btnCurrent:Hide()
+      frame.btnDispel:Hide()
+      frame.btnTaken:Hide()
+      frame.btnTPS:Hide()
+      frame.btnRecent:Hide()
     else
       frame.btnDamage:Hide()
       frame.btnDPS:Hide()
@@ -735,6 +842,10 @@ local function CreateWindow(wid)
       frame.btnHPS:Hide()
       frame.btnOverall:Show()
       frame.btnCurrent:Show()
+      frame.btnDispel:Hide()
+      frame.btnTaken:Hide()
+      frame.btnTPS:Hide()
+      frame.btnRecent:Hide()
     end
   end)
 
@@ -751,7 +862,7 @@ local function CreateWindow(wid)
   frame.btnMode.caption:SetFont(STANDARD_TEXT_FONT, 9)
   frame.btnMode.caption:SetText("Mode: Damage")
   frame.btnMode.caption:SetAllPoints()
-  frame.btnMode.tooltip = { "Select Mode", "|cffffffffDamage, DPS, Heal, HPS" }
+  frame.btnMode.tooltip = { "Select Mode", "|cffffffffDamage, DPS, Heal, HPS, Dispel, Taken, TPS" }
   frame.btnMode:SetScript("OnEnter", btnEnter)
   frame.btnMode:SetScript("OnLeave", btnLeave)
   frame.btnMode:SetScript("OnClick", function()
@@ -762,6 +873,10 @@ local function CreateWindow(wid)
       frame.btnHPS:Hide()
       frame.btnOverall:Hide()
       frame.btnCurrent:Hide()
+      frame.btnDispel:Hide()
+      frame.btnTaken:Hide()
+      frame.btnTPS:Hide()
+      frame.btnRecent:Hide()
     else
       frame.btnDamage:Show()
       frame.btnDPS:Show()
@@ -769,6 +884,10 @@ local function CreateWindow(wid)
       frame.btnHPS:Show()
       frame.btnOverall:Hide()
       frame.btnCurrent:Hide()
+      frame.btnDispel:Show()
+      frame.btnTaken:Show()
+      frame.btnTPS:Show()
+      frame.btnRecent:Show()
     end
   end)
 
@@ -829,12 +948,14 @@ local function CreateWindow(wid)
   frame.btnAnnounce:SetScript("OnLeave", btnLeave)
   frame.btnAnnounce:SetScript("OnClick", function()
     if IsShiftKeyDown() then
-      -- reload / anounce
+    -- reload / anounce
       frame:Refresh(nil, true)
     else
       local ctype = tbc and ChatFrameEditBox:GetAttribute("chatType") or ChatFrameEditBox.chatType
       local color = chatcolors[ctype]
-      if not color then color = "|cff00FAF6" end
+      if not color then
+        color = "|cff00FAF6"
+      end
 
       local name = view_templates[config[frame:GetID()].view].name
       local text = "Post |cffffdd00" .. name .. "|r data into /" .. color..string.lower(ctype) .. "|r?"
@@ -842,7 +963,8 @@ local function CreateWindow(wid)
       local dialog = StaticPopupDialogs["SHAGUMETER_QUESTION"]
       dialog.text = text
 
-      dialog.OnAccept = function() frame:Refresh(nil, true) end
+      dialog.OnAccept = function() frame:Refresh(nil, true)
+      end
       StaticPopup_Show("SHAGUMETER_QUESTION")
     end
   end)
@@ -929,7 +1051,7 @@ local function CreateWindow(wid)
     }
 
     frame.btnWindow:SetScript("OnClick", function()
-      for i=1,10 do
+      for i = 1,10 do
         if not ShaguDPS.window[i] then
           ShaguDPS.window[i] = CreateWindow(i)
           ShaguDPS.window.Refresh(true)
@@ -991,6 +1113,10 @@ local function CreateWindow(wid)
     frame.btnDPS,
     frame.btnHeal,
     frame.btnHPS,
+    frame.btnDispel,
+    frame.btnTaken,
+    frame.btnTPS,
+    frame.btnRecent,
     frame.btnOverall,
     frame.btnCurrent
   }
@@ -1007,7 +1133,7 @@ window[1] = window[1] or CreateWindow(1)
 
 -- update all available windows
 window.Refresh = function(force, report)
-  for i=1,10 do
+  for i = 1,10 do
     if config[i] then
       window[i] = window[i] or CreateWindow(i)
       window[i]:Refresh(force, report)
